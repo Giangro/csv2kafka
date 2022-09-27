@@ -32,8 +32,8 @@ const sendMessage = async (row) => {
 
     let payload = row[0];
     let hdr = {};
-
-    for (let i=1;i<14;) {        
+    
+    for (let i=1;i<row.length;) {        
         hdr[row[i++].trim()] = row[i++];
     }
     
