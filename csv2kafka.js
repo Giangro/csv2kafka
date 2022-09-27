@@ -34,7 +34,7 @@ const sendMessage = async (row) => {
     let hdr = {};
 
     for (let i=1;i<14;) {        
-        hdr[row[i++]] = row[i++];
+        hdr[row[i++].trim()] = row[i++];
     }
     
     await producer.send({
