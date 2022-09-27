@@ -1,10 +1,10 @@
 const fs = require("fs");
 const { parse } = require("csv-parse");
-const { Kafka, logLevel } = require('kafkajs')
+const { Kafka, logLevel, KafkaMessage } = require('kafkajs')
 
-const stato = 'SEPMN023B';
-const contentType = 'application/json';
-const spring_json_header_types = '{"stato":"java.lang.String","codiceOdl":"java.lang.String","partitionKey":"java.lang.String","confCliente":"java.lang.Integer","codiceOggettoPostale":"java.lang.String","contentType":"java.lang.String"}';
+//const stato = 'SEPMN023B';
+//const contentType = 'application/json';
+//const spring_json_header_types = '{"stato":"java.lang.String","codiceOdl":"java.lang.String","partitionKey":"java.lang.String","confCliente":"java.lang.Integer","codiceOggettoPostale":"java.lang.String","contentType":"java.lang.String"}';
 
 const kafka = new Kafka({
     logLevel: logLevel.INFO,    
@@ -24,34 +24,37 @@ const kafka = new Kafka({
 
 const producer = kafka.producer();
 let counter = 0;
+let messagesent = 0;
+let canshutdown = false;
+let exitimmediate = false;
 
 const sendMessage = async (row) => {
 
-    let codiceOggettoPostale = row[0];
-    let codiceOdl = row[1];
-    let partitionKey = codiceOdl;
-    let confCliente = row[2];
+    let payload = row[0];
+    let hdr = {};
 
-    return producer.send({
-        topic: 'SEP.OdlMessoOutbound',
+    for (let i=1;i<14;) {        
+        hdr[row[i++]] = row[i++];
+    }
+    
+    await producer.send({
+        topic: 'SDH.Request',
         acks: 1,
         timeout: 30000,
         retry: 60,
         messages: [{
             partition: 0,
-            /*key: partitionKey,*/
-            value: '{"codiceOggettoPostale":"' + codiceOggettoPostale + '"}',
-            headers: {
-                'stato': '"' + stato + '"',
-                'codiceOdl': '"' + codiceOdl + '"',
-                'partitionKey': '"' + partitionKey + '"',
-                'confCliente': confCliente,
-                'codiceOggettoPostale': '"' + codiceOggettoPostale + '"',
-                'contentType': '"' + contentType + '"',
-                'spring_json_header_types': spring_json_header_types
-            }
+            value: payload,
+            headers: hdr
         }]
-    })    
+    }).then(response => {
+        undefined
+        /*kafka.logger().info(`Messages sent`, {
+            response            
+        })*/
+    })
+    .catch(e => kafka.logger().error(`[csv2kafka/producer] ${e.message}`, { stack: e.stack }));
+    messagesent++;
 }
 
 const shutdown = async () => {
@@ -62,29 +65,29 @@ const shutdown = async () => {
 const run = async () => {
     console.log("Started...");
     await producer.connect();    
-    fs.createReadStream("./Battente.csv")
+    fs.createReadStream("./sdhrequest.csv")
         .pipe(parse({ delimiter: ";", from_line: 2 }))
         .on("data", function (row) {
             counter++;
-            sendMessage(row)
-                .then(response => {
-                    undefined
-                    /*kafka.logger().info(`Messages sent`, {
-                    response            
-                    })*/
-                })
-                .catch(e => kafka.logger().error(`[csv2kafka/producer] ${e.message}`, { stack: e.stack }));
+            sendMessage(row);                
             /*console.log("message #" + counter + " has been sent.");*/
         })
         .on("end", function () {            
             console.log("Finished. Flushing #" + counter + " messages. Please Wait.");
-            shutdown();
+            canshutdown=true;        
         })
         .on("error", function (error) {            
             console.log(error.message);
-            shutdown();
+            canshutdown=true;
+            exitimmediate=true;
         });
 
+        setInterval(()=>{
+            //console.log('can shutdown = '+canshutdown+' counter = '+counter+' msg sent = '+messagesent);  
+            if (canshutdown==true && (counter == messagesent || exitimmediate == true))
+                shutdown();          
+        }, 1000);
+        
 }
 
 run().catch(e => kafka.logger().error(`[csv2kafka/producer] ${e.message}`, { stack: e.stack }))
@@ -108,8 +111,7 @@ errorTypes.map(type => {
 signalTraps.map(type => {
   process.once(type, async () => {
     console.log('')
-    kafka.logger().info('[csv2kafka/producer] disconnecting')
-    clearInterval(intervalId)
+    kafka.logger().info('[csv2kafka/producer] disconnecting')    
     await producer.disconnect()
   })
 })
