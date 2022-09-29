@@ -1,0 +1,7 @@
+Application:  
+  CsvFile: ./sdhrequest.csv
+  Kafka:
+    ClientId: toolIO
+    Cluster: localhost:9092
+    Topic: SDH.Request
+    
