@@ -4,4 +4,3 @@ Application:
     ClientId: toolIO
     Cluster: localhost:9092
     Topic: SDH.Request
-    
