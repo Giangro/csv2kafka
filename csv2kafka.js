@@ -92,7 +92,7 @@ const run = async () => {
 
     setInterval(() => {
         kafka.logger().info('can shutdown = ' + canshutdown + ' counter = ' + counter + ' msg sent = ' + messagesent);
-        if (canshutdown == true && (counter == messagesent || exitimmediate == true))
+        if ((canshutdown == true && counter == messagesent) || exitimmediate == true)
             shutdown();
     }, 1000);
 
