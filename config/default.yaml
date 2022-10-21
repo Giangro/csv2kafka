@@ -1,6 +1,6 @@
 Application:  
-  CsvFile: ./sdhrequest.csv
+  CsvFile: ./descrittanodo.csv
   Kafka:
     ClientId: toolIO
-    Cluster: localhost:9092
-    Topic: SDH.Request
+    Cluster: plogkaf01a:9092,plogkaf02a:9092,plogkaf03a:9092
+    Topic: DESCRITTA.NODO.ALL.RISCONTRI

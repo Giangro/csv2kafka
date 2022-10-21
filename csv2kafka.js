@@ -41,7 +41,7 @@ const sendMessage = async (row) => {
     }
 
     await producer.send({
-        topic: 'SDH.Request',
+        topic: kafkaTopic,
         acks: 1,
         timeout: 30000,
         retry: 60,
