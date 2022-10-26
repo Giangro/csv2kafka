@@ -2,5 +2,6 @@ Application:
   CsvFile: ./descrittanodo.csv
   Kafka:
     ClientId: toolIO
-    Cluster: plogkaf01a:9092,plogkaf02a:9092,plogkaf03a:9092
+    Cluster: localhost:9092
+    #    Cluster: plogkaf01a:9092,plogkaf02a:9092,plogkaf03a:9092
     Topic: DESCRITTA.NODO.ALL.RISCONTRI
