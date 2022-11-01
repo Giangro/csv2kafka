@@ -40,7 +40,7 @@ const sendMessage = async (row) => {
         hdr[row[i++].trim()] = row[i++];
     }
 
-    await producer.send({
+    producer.send({
         topic: kafkaTopic,
         acks: 1,
         timeout: 30000,
@@ -56,7 +56,7 @@ const sendMessage = async (row) => {
             response            
         })*/
     })
-        .catch(e => kafka.logger().error(`[csv2kafka/producer] ${e.message}`, { stack: e.stack }));
+    .catch(e => kafka.logger().error(`[csv2kafka/producer] ${e.message}`, { stack: e.stack }));
     messagesent++;
 }
 
@@ -81,7 +81,7 @@ const run = async () => {
             /*console.log("message #" + counter + " has been sent.");*/
         })
         .on("end", function () {
-            kafka.logger().info("Finished. Flushing #" + counter + " messages. Please Wait.");
+            kafka.logger().info("Finished. Flushing #" + (counter-messagesent) + " messages. Please Wait.");
             canshutdown = true;
         })
         .on("error", function (error) {
