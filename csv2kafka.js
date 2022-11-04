@@ -2,6 +2,8 @@ const fs = require("fs");
 const config = require('config');
 const { parse } = require("csv-parse");
 const { Kafka, logLevel, KafkaMessage } = require('kafkajs')
+const { pipeline } = require('stream');
+
 
 // read config parameter
 const csvFile = config.get('Application.CsvFile');
@@ -40,29 +42,46 @@ const sendMessage = async (row) => {
         hdr[row[i++].trim()] = row[i++];
     }
 
-    producer.send({
-        topic: kafkaTopic,
-        acks: 1,
-        timeout: 30000,
-        retry: 60,
-        messages: [{
-            partition: 0,
-            value: payload,
-            headers: hdr
-        }]
-    }).then(response => {
-        undefined
-        /*kafka.logger().info(`Messages sent`, {
-            response            
-        })*/
-    })
-    .catch(e => kafka.logger().error(`[csv2kafka/producer] ${e.message}`, { stack: e.stack }));
-    messagesent++;
+    try {
+
+        await producer.send({
+            topic: kafkaTopic,
+            acks: 1,
+            timeout: 30000,
+            retry: 60,
+            messages: [{
+                partition: 0,
+                //key: JSON.parse(payload).codiceStatoOperazionale,
+                value: payload,
+                headers: hdr
+            }]
+        });
+            
+        messagesent++;
+    }
+    catch(e) {
+        kafka.logger().error(`[csv2kafka/producer] ${e.message}`, { stack: e.stack });    
+    }
 }
 
 const shutdown = async () => {
     await producer.disconnect();
     process.exit(0);
+}
+
+const send = (csvreadstream,csvparseablestream) => {
+    return new Promise( (resolve,reject) => {
+        pipeline (
+            csvreadstream,csvparseablestream,(err) => {
+                if (err) {
+                    kafka.logger().error('error(s) occurred in pipeline');
+                    reject;
+                } else {                    
+                    resolve(err);
+                }
+            });
+        }
+    );        
 }
 
 const run = async () => {
@@ -73,35 +92,44 @@ const run = async () => {
     kafka.logger().info('csv file                    = ' + csvFile);
 
     await producer.connect();
-    fs.createReadStream(csvFile)
-        .pipe(parse({ delimiter: ";", from_line: 2 }))
-        .on("data", function (row) {
-            counter++;
-            sendMessage(row);
-            /*console.log("message #" + counter + " has been sent.");*/
-        })
-        .on("end", function () {
-            kafka.logger().info("Finished. Flushing #" + (counter-messagesent) + " messages. Please Wait.");
-            canshutdown = true;
-        })
-        .on("error", function (error) {
-            console.log(error.message);
-            canshutdown = true;
-            exitimmediate = true;
-        });
+    
+    const csvreadstream = fs.createReadStream(csvFile);
+    const csvparseablestream = parse({ delimiter: ";", from_line: 2 });
+    
+    csvparseablestream
+    .on("end", function () {
+        kafka.logger().info("Finished. Flushing #" + (counter-messagesent) + " messages. Please Wait.");
+        canshutdown = true;
+    })
+    .on("error", function (error) {
+        console.log(error.message);
+        canshutdown = true;
+        exitimmediate = true;
+    })
+    .on("data", function (row) {
+        counter++;
+        sendMessage(row);
+        if (counter % 10000 === 0) {
+            kafka.logger().info('counter = '+counter+' msg sent = '+messagesent);
+        }
+    });                    
+
+    await send(csvreadstream,csvparseablestream);
+    kafka.logger().info('counter = '+counter+' msg sent = '+messagesent);
+    //csvreadstream.pipe(csvparseablestream);
 
     setInterval(() => {
         kafka.logger().info('can shutdown = ' + canshutdown + ' counter = ' + counter + ' msg sent = ' + messagesent);
         if ((canshutdown == true && counter == messagesent) || exitimmediate == true)
             shutdown();
-    }, 1000);
+    }, 10000);
 
 }
 
-run().catch(e => kafka.logger().error(`[csv2kafka/producer] ${e.message}`, { stack: e.stack }))
+run().catch(e => kafka.logger().error(`[csv2kafka/producer] ${e.message}`, { stack: e.stack }));
 
-const errorTypes = ['unhandledRejection', 'uncaughtException']
-const signalTraps = ['SIGTERM', 'SIGINT', 'SIGUSR2']
+const errorTypes = ['unhandledRejection', 'uncaughtException'];
+const signalTraps = ['SIGTERM', 'SIGINT', 'SIGUSR2'];
 
 errorTypes.map(type => {
     process.on(type, async e => {
@@ -112,13 +140,13 @@ errorTypes.map(type => {
         } catch (_) {
             process.exit(1);
         }
-    })
-})
+    });
+});
 
 signalTraps.map(type => {
     process.once(type, async () => {
         console.log('');
         kafka.logger().info('[csv2kafka/producer] disconnecting');
         shutdown();
-    })
-})
+    });
+});
